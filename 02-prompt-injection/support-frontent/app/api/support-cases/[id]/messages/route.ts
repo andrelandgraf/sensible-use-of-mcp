@@ -6,7 +6,7 @@ import { eq, and, desc } from "drizzle-orm";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await stackServerApp.getUser();
@@ -14,13 +14,15 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const { id } = await params;
+
     // Verify the support case belongs to the user
     const [case_] = await db
       .select()
       .from(supportCase)
       .where(
         and(
-          eq(supportCase.id, params.id),
+          eq(supportCase.id, id),
           eq(supportCase.userId, user.id)
         )
       );
@@ -36,7 +38,7 @@ export async function GET(
     const messages = await db
       .select()
       .from(supportCaseMessage)
-      .where(eq(supportCaseMessage.supportCaseId, params.id))
+      .where(eq(supportCaseMessage.supportCaseId, id))
       .orderBy(supportCaseMessage.createdAt);
 
     return NextResponse.json(messages);
@@ -51,7 +53,7 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await stackServerApp.getUser();
@@ -59,6 +61,7 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const { id } = await params;
     const { message } = await request.json();
     
     if (!message?.trim()) {
@@ -74,7 +77,7 @@ export async function POST(
       .from(supportCase)
       .where(
         and(
-          eq(supportCase.id, params.id),
+          eq(supportCase.id, id),
           eq(supportCase.userId, user.id)
         )
       );
@@ -98,7 +101,7 @@ export async function POST(
     const [newMessage] = await db
       .insert(supportCaseMessage)
       .values({
-        supportCaseId: params.id,
+        supportCaseId: id,
         userId: user.id,
         message: message.trim(),
       })
@@ -108,7 +111,7 @@ export async function POST(
     await db
       .update(supportCase)
       .set({ updatedAt: new Date() })
-      .where(eq(supportCase.id, params.id));
+      .where(eq(supportCase.id, id));
 
     return NextResponse.json(newMessage);
   } catch (error) {

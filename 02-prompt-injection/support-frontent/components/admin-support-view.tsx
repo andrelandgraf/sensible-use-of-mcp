@@ -1,27 +1,29 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useTransition, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Plus, MessageCircle, Clock, CheckCircle, AlertCircle } from "lucide-react";
-import { SupportCase, SupportCaseMessage } from "@/lib/schema";
+import { MessageCircle, Clock, CheckCircle, AlertCircle, Users } from "lucide-react";
+import { SupportCase, SupportCaseMessageWithAdmin } from "@/lib/schema";
+import { 
+  getAllSupportCases, 
+  getSupportCaseMessages, 
+  addMessageToSupportCase 
+} from "@/lib/support-actions";
 
-interface SupportCaseInterfaceProps {
+interface AdminSupportViewProps {
   initialCases: SupportCase[];
-  userId: string;
-  userName: string;
 }
 
 interface ExtendedSupportCase extends SupportCase {
-  messages?: SupportCaseMessage[];
+  messages?: SupportCaseMessageWithAdmin[];
+  userDisplayName?: string;
 }
 
 const statusConfig = {
@@ -30,78 +32,54 @@ const statusConfig = {
   resolved: { color: "bg-green-500", label: "Resolved", icon: CheckCircle },
 };
 
-export function SupportCaseInterface({ initialCases, userId, userName }: SupportCaseInterfaceProps) {
+export function AdminSupportView({ initialCases }: AdminSupportViewProps) {
   const [cases, setCases] = useState<ExtendedSupportCase[]>(initialCases);
   const [selectedCase, setSelectedCase] = useState<ExtendedSupportCase | null>(null);
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [newCaseSubject, setNewCaseSubject] = useState("");
-  const [newCaseMessage, setNewCaseMessage] = useState("");
   const [newMessage, setNewMessage] = useState("");
-  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  
+  const [isPending, startTransition] = useTransition();
 
-  const createSupportCase = async () => {
-    if (!newCaseSubject.trim() || !newCaseMessage.trim()) return;
-    
-    setIsLoading(true);
-    try {
-      const response = await fetch("/api/support-cases", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          subject: newCaseSubject,
-          initialMessage: newCaseMessage,
-        }),
-      });
-
-      if (response.ok) {
-        const newCase = await response.json();
-        setCases(prev => [newCase, ...prev]);
-        setNewCaseSubject("");
-        setNewCaseMessage("");
-        setIsCreateDialogOpen(false);
-      }
-    } catch (error) {
-      console.error("Error creating support case:", error);
-    } finally {
-      setIsLoading(false);
+  // Refresh cases data
+  const refreshCases = async () => {
+    const result = await getAllSupportCases();
+    if (result.success) {
+      setCases(result.data);
+    } else {
+      setError(result.error);
     }
   };
 
   const loadCaseMessages = async (caseId: string) => {
-    try {
-      const response = await fetch(`/api/support-cases/${caseId}/messages`);
-      if (response.ok) {
-        const messages = await response.json();
-        setSelectedCase(prev => prev ? { ...prev, messages } : null);
-      }
-    } catch (error) {
-      console.error("Error loading messages:", error);
+    const result = await getSupportCaseMessages(caseId);
+    
+    if (result.success) {
+      setSelectedCase(prev => prev ? { ...prev, messages: result.data } : null);
+    } else {
+      setError(result.error);
     }
   };
 
-  const addMessage = async () => {
+  const handleAddMessage = () => {
     if (!newMessage.trim() || !selectedCase) return;
 
-    try {
-      const response = await fetch(`/api/support-cases/${selectedCase.id}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: newMessage }),
-      });
-
-      if (response.ok) {
-        const newMsg = await response.json();
+    startTransition(async () => {
+      setError(null);
+      const result = await addMessageToSupportCase(selectedCase.id, newMessage);
+      
+      if (result.success) {
         setSelectedCase(prev => prev ? {
           ...prev,
-          messages: [...(prev.messages || []), newMsg]
+          messages: [...(prev.messages || []), result.data]
         } : null);
         setNewMessage("");
+        // Refresh the cases list to update the timestamp
+        await refreshCases();
+      } else {
+        setError(result.error);
       }
-    } catch (error) {
-      console.error("Error adding message:", error);
-    }
+    });
   };
 
   const openCaseDetail = async (supportCase: SupportCase) => {
@@ -127,51 +105,23 @@ export function SupportCaseInterface({ initialCases, userId, userName }: Support
 
   return (
     <div className="space-y-6">
-      {/* Create New Case Dialog */}
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogTrigger asChild>
-          <Button className="w-full sm:w-auto">
-            <Plus className="w-4 h-4 mr-2" />
-            Create New Support Case
-          </Button>
-        </DialogTrigger>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Create New Support Case</DialogTitle>
-            <DialogDescription>
-              Describe your issue and we'll help you resolve it.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="subject">Subject</Label>
-              <Input
-                id="subject"
-                placeholder="Brief description of your issue"
-                value={newCaseSubject}
-                onChange={(e) => setNewCaseSubject(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="message">Initial Message</Label>
-              <Textarea
-                id="message"
-                placeholder="Please provide detailed information about your issue"
-                rows={4}
-                value={newCaseMessage}
-                onChange={(e) => setNewCaseMessage(e.target.value)}
-              />
-            </div>
-            <Button 
-              onClick={createSupportCase} 
-              disabled={isLoading || !newCaseSubject.trim() || !newCaseMessage.trim()}
-              className="w-full"
-            >
-              {isLoading ? "Creating..." : "Create Support Case"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Users className="w-6 h-6" />
+          <h2 className="text-2xl font-semibold">Admin Support Dashboard</h2>
+        </div>
+        <Button onClick={refreshCases} variant="outline" disabled={isPending}>
+          {isPending ? "Refreshing..." : "Refresh"}
+        </Button>
+      </div>
+
+      {/* Error Display */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+          {error}
+        </div>
+      )}
 
       {/* Support Cases List */}
       <div className="grid gap-4">
@@ -179,9 +129,9 @@ export function SupportCaseInterface({ initialCases, userId, userName }: Support
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
               <MessageCircle className="w-12 h-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium">No support cases yet</h3>
+              <h3 className="text-lg font-medium">No support cases</h3>
               <p className="text-muted-foreground text-center max-w-sm">
-                Create your first support case to get help with any issues you're experiencing.
+                No support cases have been created yet.
               </p>
             </CardContent>
           </Card>
@@ -205,6 +155,9 @@ export function SupportCaseInterface({ initialCases, userId, userName }: Support
                         <span className="ml-1">
                           {statusConfig[supportCase.status as keyof typeof statusConfig]?.label}
                         </span>
+                      </Badge>
+                      <Badge variant="outline" className="text-xs">
+                        User ID: {supportCase.userId.slice(0, 8)}...
                       </Badge>
                     </div>
                   </div>
@@ -238,7 +191,7 @@ export function SupportCaseInterface({ initialCases, userId, userName }: Support
               )}
             </DialogTitle>
             <DialogDescription>
-              Case created on {selectedCase && formatDate(selectedCase.createdAt)}
+              Case created on {selectedCase && formatDate(selectedCase.createdAt)} by User ID: {selectedCase?.userId.slice(0, 8)}...
             </DialogDescription>
           </DialogHeader>
           
@@ -253,14 +206,21 @@ export function SupportCaseInterface({ initialCases, userId, userName }: Support
                       {selectedCase.messages.map((message, index) => (
                         <div key={message.id} className="space-y-2">
                           <div className="flex items-center justify-between text-sm">
-                            <span className="font-medium">
-                              {message.userId === userId ? userName : "Support Agent"}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">
+                                {message.isAdmin ? "Admin" : `User (${message.userId.slice(0, 8)}...)`}
+                              </span>
+                              {message.isAdmin && (
+                                <Badge variant="secondary" className="bg-blue-100 text-blue-800 text-xs">
+                                  Admin
+                                </Badge>
+                              )}
+                            </div>
                             <span className="text-muted-foreground">
                               {formatDate(message.createdAt)}
                             </span>
                           </div>
-                          <div className="bg-muted p-3 rounded-md">
+                          <div className={`p-3 rounded-md ${message.isAdmin ? 'bg-blue-50 border-l-4 border-blue-500' : 'bg-muted'}`}>
                             {message.message}
                           </div>
                           {index < (selectedCase.messages?.length ?? 0) - 1 && <Separator />}
@@ -276,28 +236,27 @@ export function SupportCaseInterface({ initialCases, userId, userName }: Support
               </div>
 
               {/* Add New Message */}
-              {selectedCase.status !== "resolved" && (
-                <div className="space-y-2">
-                  <Label htmlFor="new-message">Add Message</Label>
-                  <div className="flex gap-2">
-                    <Textarea
-                      id="new-message"
-                      placeholder="Type your message here..."
-                      value={newMessage}
-                      onChange={(e) => setNewMessage(e.target.value)}
-                      rows={3}
-                      className="flex-1"
-                    />
-                    <Button 
-                      onClick={addMessage}
-                      disabled={!newMessage.trim()}
-                      className="self-end"
-                    >
-                      Send
-                    </Button>
-                  </div>
+              <div className="space-y-2">
+                <Label htmlFor="admin-message">Reply as Admin</Label>
+                <div className="flex gap-2">
+                  <Textarea
+                    id="admin-message"
+                    placeholder="Type your admin response here..."
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    rows={3}
+                    className="flex-1"
+                    disabled={isPending}
+                  />
+                  <Button 
+                    onClick={handleAddMessage}
+                    disabled={!newMessage.trim() || isPending}
+                    className="self-end"
+                  >
+                    {isPending ? "Sending..." : "Send"}
+                  </Button>
                 </div>
-              )}
+              </div>
             </div>
           )}
         </DialogContent>

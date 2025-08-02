@@ -60,6 +60,7 @@ export type SupportCase = typeof supportCase.$inferSelect
 export type NewSupportCase = typeof supportCase.$inferInsert
 export type SupportCaseMessage = typeof supportCaseMessage.$inferSelect
 export type NewSupportCaseMessage = typeof supportCaseMessage.$inferInsert
+export type SupportCaseMessageWithAdmin = SupportCaseMessage & { isAdmin: boolean }
 export type Admin = typeof admin.$inferSelect
 export type NewAdmin = typeof admin.$inferInsert
 export type ApiKey = typeof apiKey.$inferSelect

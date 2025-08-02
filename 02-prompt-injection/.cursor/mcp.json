@@ -1,0 +1,12 @@
+{
+    "mcpServers": {
+        "support-mcp-server": {
+            "command": "node",
+            "args": ["./support-mcp-server/dist/index.js", "admin-api-key"]
+        },
+        "postgres-mcp-server": {
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-postgres", "postgres-url"]
+        }
+    }
+}

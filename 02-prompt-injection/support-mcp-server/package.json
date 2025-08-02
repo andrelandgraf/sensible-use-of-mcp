@@ -7,7 +7,7 @@
   "author": "",
   "main": "index.ts",
   "scripts": {
-    "start": "node index.js",
+    "start": "node dist/index.js",
     "build": "tsc",
     "dev": "tsx index.ts",
     "typecheck": "tsc --noEmit"

@@ -263,7 +263,7 @@ export function SupportCaseInterface({ initialCases, userId, userName }: Support
                           <div className="bg-muted p-3 rounded-md">
                             {message.message}
                           </div>
-                          {index < selectedCase.messages.length - 1 && <Separator />}
+                          {index < (selectedCase.messages?.length ?? 0) - 1 && <Separator />}
                         </div>
                       ))}
                     </div>

@@ -1,4 +1,4 @@
-import { pgTable, integer, text, jsonb, uuid, pgEnum, timestamp, primaryKey } from "drizzle-orm/pg-core"
+import { pgTable, text, uuid, pgEnum, timestamp, boolean } from "drizzle-orm/pg-core"
 import { usersSync as usersSyncTable } from "drizzle-orm/neon"
 
 export type User = typeof usersSyncTable.$inferSelect
@@ -33,8 +33,35 @@ export const supportCaseMessage = pgTable(
 	},
 )
 
+export const admin = pgTable(
+	"admin",
+	{
+		id: uuid("id").defaultRandom().primaryKey(),
+		userId: text("user_id").notNull().references(() => usersSyncTable.id, { onDelete: "cascade" }).unique(),
+		createdAt: timestamp("created_at").defaultNow().notNull(),
+	},
+)
+
+export const apiKey = pgTable(
+	"api_key",
+	{
+		id: uuid("id").defaultRandom().primaryKey(),
+		key: uuid("key").defaultRandom().notNull().unique(),
+		userId: text("user_id").notNull().references(() => usersSyncTable.id, { onDelete: "cascade" }),
+		name: text("name").notNull(),
+		isActive: boolean("is_active").default(true).notNull(),
+		lastUsedAt: timestamp("last_used_at"),
+		createdAt: timestamp("created_at").defaultNow().notNull(),
+	},
+)
+
+// Type exports
 export type SupportCase = typeof supportCase.$inferSelect
 export type NewSupportCase = typeof supportCase.$inferInsert
 export type SupportCaseMessage = typeof supportCaseMessage.$inferSelect
 export type NewSupportCaseMessage = typeof supportCaseMessage.$inferInsert
+export type Admin = typeof admin.$inferSelect
+export type NewAdmin = typeof admin.$inferInsert
+export type ApiKey = typeof apiKey.$inferSelect
+export type NewApiKey = typeof apiKey.$inferInsert
 

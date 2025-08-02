@@ -1,14 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stackServerApp } from "@/stack";
 import { db } from "@/lib/db";
 import { supportCase, supportCaseMessage } from "@/lib/schema";
+import { authenticateAdminApiRequest } from "@/lib/api-auth";
+import { desc } from "drizzle-orm";
+
+// GET all support cases (admin only)
+export async function GET(request: NextRequest) {
+  try {
+    const authResult = await authenticateAdminApiRequest(request);
+    if ('error' in authResult) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status });
+    }
+
+    const cases = await db
+      .select()
+      .from(supportCase)
+      .orderBy(desc(supportCase.updatedAt));
+
+    return NextResponse.json(cases);
+  } catch (error) {
+    console.error("Error fetching support cases:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await stackServerApp.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const authResult = await authenticateAdminApiRequest(request);
+    if ('error' in authResult) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status });
     }
+    const { user } = authResult;
 
     const { subject, initialMessage } = await request.json();
     
@@ -23,7 +48,7 @@ export async function POST(request: NextRequest) {
     const [newCase] = await db
       .insert(supportCase)
       .values({
-        userId: user.id,
+        userId: user.userId,
         subject: subject.trim(),
         status: "open",
       })
@@ -32,7 +57,7 @@ export async function POST(request: NextRequest) {
     // Create the initial message
     await db.insert(supportCaseMessage).values({
       supportCaseId: newCase.id,
-      userId: user.id,
+      userId: user.userId,
       message: initialMessage.trim(),
     });
 

@@ -1,31 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stackServerApp } from "@/stack";
 import { db } from "@/lib/db";
 import { supportCase, supportCaseMessage } from "@/lib/schema";
 import { eq, and, desc } from "drizzle-orm";
+import { authenticateAdminApiRequest } from "@/lib/api-auth";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await stackServerApp.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const authResult = await authenticateAdminApiRequest(request);
+    if ('error' in authResult) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status });
     }
 
     const { id } = await params;
 
-    // Verify the support case belongs to the user
+    // Admin can access any support case
     const [case_] = await db
       .select()
       .from(supportCase)
-      .where(
-        and(
-          eq(supportCase.id, id),
-          eq(supportCase.userId, user.id)
-        )
-      );
+      .where(eq(supportCase.id, id));
 
     if (!case_) {
       return NextResponse.json(
@@ -56,10 +51,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await stackServerApp.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const authResult = await authenticateAdminApiRequest(request);
+    if ('error' in authResult) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status });
     }
+    const { user } = authResult;
 
     const { id } = await params;
     const { message } = await request.json();
@@ -71,16 +67,11 @@ export async function POST(
       );
     }
 
-    // Verify the support case belongs to the user
+    // Admin can reply to any support case
     const [case_] = await db
       .select()
       .from(supportCase)
-      .where(
-        and(
-          eq(supportCase.id, id),
-          eq(supportCase.userId, user.id)
-        )
-      );
+      .where(eq(supportCase.id, id));
 
     if (!case_) {
       return NextResponse.json(
@@ -89,20 +80,12 @@ export async function POST(
       );
     }
 
-    // Check if case is resolved (optional - you might want to allow messages on resolved cases)
-    if (case_.status === "resolved") {
-      return NextResponse.json(
-        { error: "Cannot add messages to resolved cases" },
-        { status: 400 }
-      );
-    }
-
     // Create the new message
     const [newMessage] = await db
       .insert(supportCaseMessage)
       .values({
         supportCaseId: id,
-        userId: user.id,
+        userId: user.userId,
         message: message.trim(),
       })
       .returning();
